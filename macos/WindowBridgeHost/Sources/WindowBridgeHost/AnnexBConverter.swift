@@ -27,6 +27,17 @@ enum AnnexBConverter {
             throw NSError(domain: "WindowBridge", code: Int(status))
         }
 
+        return try convertAVCC(Data(bytes))
+    }
+
+    static func convertAVCC(_ data: Data) throws -> Data {
+        let bytes = [UInt8](data)
+        let totalLength = bytes.count
+
+        guard totalLength > 0 else {
+            throw NSError(domain: "WindowBridge", code: 2)
+        }
+
         var output = Data()
         var offset = 0
 
