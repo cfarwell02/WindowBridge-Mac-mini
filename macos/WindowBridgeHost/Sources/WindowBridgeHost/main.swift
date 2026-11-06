@@ -69,6 +69,32 @@ do {
                 try png.write(to: url)
                 print("Screenshot saved: \(url.path)")
             }
+
+            let receiver = FrameReceiver()
+
+            let stream = SCStream(
+                filter: filter,
+                configuration: config,
+                delegate: nil
+            )
+
+            try stream.addStreamOutput(
+                receiver,
+                type: .screen,
+                sampleHandlerQueue: DispatchQueue(label: "com.windowbridge.frames")
+            )
+
+            let startCapture: () async throws -> Void = stream.startCapture
+            try await startCapture()
+
+            print("Capturing Xcode for 5 seconds...")
+            try await Task.sleep(for: .seconds(5))
+
+            let stopCapture: () async throws -> Void = stream.stopCapture
+            try await stopCapture()
+
+            print("Capture stopped.")
+
         }
     }
 
