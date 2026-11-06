@@ -96,7 +96,7 @@ do {
 
             let stopCapture: () async throws -> Void = stream.stopCapture
             try await stopCapture()
-
+            try receiver.finishEncoding()
             print("Capture stopped.")
 
         }

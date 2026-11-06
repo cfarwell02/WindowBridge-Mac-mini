@@ -72,10 +72,19 @@ final class FrameReceiver: NSObject, SCStreamOutput {
                 print("Pixel format: \(String(format, radix: 16))")
 
                 do {
+
+                    let recordingURL = FileManager.default.homeDirectoryForCurrentUser
+                        .appendingPathComponent("Desktop/windowbridge-test.h264")
+
+                    let writer = try H264FileWriter(url: recordingURL)
+
                     let encoder = try H264Encoder(
                         width: Int32(width),
-                        height: Int32(height)
+                        height: Int32(height),
+                        fileWriter: writer
                     )
+
+                    print("Recording H.264 to: \(recordingURL.path)")
 
                     self.encoder = encoder
 
@@ -108,4 +117,14 @@ final class FrameReceiver: NSObject, SCStreamOutput {
         }
 
     }
+
+    func finishEncoding() throws {
+        guard let encoder else {
+            print("No encoder to finalize")
+            return
+        }
+
+        try encoder.finish()
+    }
+
 }
