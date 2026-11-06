@@ -1,6 +1,6 @@
 import Foundation
 
-final class H264FileWriter: @unchecked Sendable {
+final class H264FileWriter: H264Output, @unchecked Sendable {
     private let fileHandle: FileHandle
     private let lock = NSLock()
 

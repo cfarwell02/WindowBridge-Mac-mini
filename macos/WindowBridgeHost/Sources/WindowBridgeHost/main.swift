@@ -27,15 +27,32 @@ do {
     if let window = xcodeWindows.first {
         if #available(macOS 14.0, *) {
 
+            let tcpServer = try TCPVideoServer(port: 5000)
+            tcpServer.start()
+
+            print("WindowBridge TCP server starting on port 5000")
+
             guard let display = content.displays.first else {
                 fatalError("No available display found")
             }
 
             let filter = SCContentFilter(display: display, including: [window])
 
+            print("Display frame: \(display.frame)")
+            print("Window frame: \(window.frame)")
+            print("Filter content rect: \(filter.contentRect)")
+            print("Point-to-pixel scale: \(filter.pointPixelScale)")
+
             let config = SCStreamConfiguration()
             config.width = Int(window.frame.width)
             config.height = Int(window.frame.height)
+
+            config.sourceRect = CGRect(
+                x: window.frame.minX - display.frame.minX,
+                y: window.frame.minY - display.frame.minY,
+                width: window.frame.width,
+                height: window.frame.height
+            )
 
             _ = try H264Encoder(width: Int32(config.width), height: Int32(config.height))
 
@@ -74,7 +91,7 @@ do {
                 print("Screenshot saved: \(url.path)")
             }
 
-            let receiver = FrameReceiver()
+            let receiver = FrameReceiver(output: tcpServer)
 
             let stream = SCStream(
                 filter: filter,
@@ -91,12 +108,13 @@ do {
             let startCapture: () async throws -> Void = stream.startCapture
             try await startCapture()
 
-            print("Capturing Xcode for 5 seconds...")
-            try await Task.sleep(for: .seconds(5))
+            print("Capturing Xcode for 30 seconds...")
+            try await Task.sleep(for: .seconds(30))
 
             let stopCapture: () async throws -> Void = stream.stopCapture
             try await stopCapture()
             try receiver.finishEncoding()
+            tcpServer.stop()
             print("Capture stopped.")
 
         }

@@ -5,12 +5,12 @@ import VideoToolbox
 
 final class H264Encoder {
     private let session: VTCompressionSession
-    private let fileWriter: H264FileWriter?
+    private let fileWriter: H264Output?
 
     init(
         width: Int32,
         height: Int32,
-        fileWriter: H264FileWriter? = nil
+        fileWriter: H264Output? = nil
     ) throws {
         self.fileWriter = fileWriter
         var newSession: VTCompressionSession?

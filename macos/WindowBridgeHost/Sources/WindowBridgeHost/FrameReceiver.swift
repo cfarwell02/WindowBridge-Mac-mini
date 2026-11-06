@@ -6,6 +6,12 @@ import ScreenCaptureKit
 final class FrameReceiver: NSObject, SCStreamOutput {
     private var frameCount = 0
     private var encoder: H264Encoder?
+    private let output: H264Output?
+
+    init(output: H264Output? = nil) {
+        self.output = output
+        super.init()
+    }
     private var firstFrameTime: TimeInterval?
     private var completeFrameCount = 0
 
@@ -73,18 +79,24 @@ final class FrameReceiver: NSObject, SCStreamOutput {
 
                 do {
 
-                    let recordingURL = FileManager.default.homeDirectoryForCurrentUser
-                        .appendingPathComponent("Desktop/windowbridge-test.h264")
+                    let destination: H264Output
 
-                    let writer = try H264FileWriter(url: recordingURL)
+                    if let output {
+                        destination = output
+                        print("H.264 output configured for network streaming")
+                    } else {
+                        let recordingURL = FileManager.default.homeDirectoryForCurrentUser
+                            .appendingPathComponent("Desktop/windowbridge-test.h264")
+
+                        destination = try H264FileWriter(url: recordingURL)
+                        print("Recording H.264 to: \(recordingURL.path)")
+                    }
 
                     let encoder = try H264Encoder(
                         width: Int32(width),
                         height: Int32(height),
-                        fileWriter: writer
+                        fileWriter: destination
                     )
-
-                    print("Recording H.264 to: \(recordingURL.path)")
 
                     self.encoder = encoder
 
