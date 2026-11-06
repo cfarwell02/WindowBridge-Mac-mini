@@ -50,5 +50,20 @@ final class FrameReceiver: NSObject, SCStreamOutput {
             }
         }
 
+        if frameCount > 1,
+            let encoder,
+            let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+        {
+
+            do {
+                try encoder.encode(
+                    pixelBuffer,
+                    at: CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                )
+            } catch {
+                print("Failed to encode frame \(frameCount): \(error)")
+            }
+        }
+
     }
 }
