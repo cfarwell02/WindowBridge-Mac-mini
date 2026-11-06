@@ -37,6 +37,10 @@ do {
             config.width = Int(window.frame.width)
             config.height = Int(window.frame.height)
 
+            _ = try H264Encoder(width: Int32(config.width), height: Int32(config.height))
+
+            print("H.264 encoder initialized successfully.")
+
             let image: CGImage = try await withCheckedThrowingContinuation { continuation in
                 SCScreenshotManager.captureImage(
                     contentFilter: filter,
