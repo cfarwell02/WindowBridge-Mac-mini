@@ -1,8 +1,16 @@
 // The Swift Programming Language
 // https://docs.swift.org/swift-book
 
+import CoreGraphics
 import Foundation
 import ScreenCaptureKit
+
+if !CGPreflightPostEventAccess() {
+    print("Requesting input control permission...")
+    _ = CGRequestPostEventAccess()
+}
+
+print("Input control authorized: \(CGPreflightPostEventAccess())")
 
 do {
     let content = try await SCShareableContent.excludingDesktopWindows(
@@ -24,13 +32,22 @@ do {
         print("No Xcode windows found.")
     }
 
-    if let window = xcodeWindows.first {
+    if let window = xcodeWindows.max(by: {
+        $0.frame.width * $0.frame.height
+            < $1.frame.width * $1.frame.height
+    }) {
         if #available(macOS 14.0, *) {
 
             let tcpServer = try TCPVideoServer(port: 5000)
             tcpServer.start()
 
             print("WindowBridge TCP server starting on port 5000")
+
+            let inputServer = try TCPInputServer(
+                port: 5001,
+                windowFrame: window.frame
+            )
+            inputServer.start()
 
             guard let display = content.displays.first else {
                 fatalError("No available display found")
@@ -108,13 +125,14 @@ do {
             let startCapture: () async throws -> Void = stream.startCapture
             try await startCapture()
 
-            print("Capturing Xcode for 30 seconds...")
-            try await Task.sleep(for: .seconds(30))
+            print("Capturing Xcode for 5 minutes...")
+            try await Task.sleep(for: .seconds(300))
 
             let stopCapture: () async throws -> Void = stream.stopCapture
             try await stopCapture()
             try receiver.finishEncoding()
             tcpServer.stop()
+            inputServer.stop()
             print("Capture stopped.")
 
         }
