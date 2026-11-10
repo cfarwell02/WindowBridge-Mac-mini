@@ -8,6 +8,7 @@ final class TCPVideoServer: H264Output, @unchecked Sendable {
     )
 
     private var activeConnection: NWConnection?
+    private var waitingForKeyframe = true
 
     init(port: UInt16) throws {
         guard let nwPort = NWEndpoint.Port(rawValue: port) else {
@@ -47,7 +48,9 @@ final class TCPVideoServer: H264Output, @unchecked Sendable {
                 return
             }
 
+            self.activeConnection?.cancel()
             self.activeConnection = connection
+            self.waitingForKeyframe = true
 
             connection.stateUpdateHandler = { state in
                 switch state {
@@ -70,6 +73,10 @@ final class TCPVideoServer: H264Output, @unchecked Sendable {
     }
 
     func append(_ data: Data) throws {
+        try appendFrame(data, isKeyframe: false)
+    }
+
+    func appendFrame(_ data: Data, isKeyframe: Bool) throws {
         queue.async { [weak self] in
             guard let self,
                 let connection = self.activeConnection
@@ -81,11 +88,19 @@ final class TCPVideoServer: H264Output, @unchecked Sendable {
                 return
             }
 
+            if self.waitingForKeyframe {
+                guard isKeyframe else { return }
+
+                self.waitingForKeyframe = false
+                print("Starting video client with headers and keyframe")
+            }
+
             connection.send(
                 content: data,
                 completion: .contentProcessed { error in
                     if let error {
                         print("TCP video send failed: \(error)")
+                        connection.cancel()
                     }
                 }
             )

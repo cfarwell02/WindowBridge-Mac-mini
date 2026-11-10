@@ -36,6 +36,44 @@ final class H264Encoder {
         }
 
         self.session = newSession
+
+        let properties: [(CFString, CFTypeRef)] = [
+            (
+                kVTCompressionPropertyKey_RealTime,
+                kCFBooleanTrue
+            ),
+            (
+                kVTCompressionPropertyKey_AllowFrameReordering,
+                kCFBooleanFalse
+            ),
+            (
+                kVTCompressionPropertyKey_MaxKeyFrameInterval,
+                NSNumber(value: 60)
+            ),
+            (
+                kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration,
+                NSNumber(value: 1.0)
+            ),
+        ]
+
+        for (key, value) in properties {
+            let propertyStatus = VTSessionSetProperty(
+                session,
+                key: key,
+                value: value
+            )
+
+            guard propertyStatus == noErr else {
+                throw NSError(
+                    domain: "WindowBridge.Encoder",
+                    code: Int(propertyStatus),
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "Could not set encoder property \(key)"
+                    ]
+                )
+            }
+        }
     }
 
     func encode(_ pixelBuffer: CVPixelBuffer, at timestamp: CMTime) throws {
@@ -51,26 +89,6 @@ final class H264Encoder {
             guard status == noErr, let sampleBuffer else {
                 print("Encoding failed: \(status)")
                 return
-            }
-
-            let bytes = CMSampleBufferGetTotalSampleSize(sampleBuffer)
-            print("Encoded frame: \(bytes) bytes")
-
-            let attachments =
-                CMSampleBufferGetSampleAttachmentsArray(
-                    sampleBuffer,
-                    createIfNecessary: false
-                ) as? [CFDictionary]
-
-            if let attachment = attachments?.first {
-                let isKeyframe = !CFDictionaryContainsKey(
-                    attachment,
-                    Unmanaged.passUnretained(kCMSampleAttachmentKey_NotSync).toOpaque()
-                )
-
-                if isKeyframe {
-                    print("H.264 KEYFRAME detected!")
-                }
             }
 
             do {
@@ -91,59 +109,39 @@ final class H264Encoder {
                             )
                         } ?? false
 
-                    if isKeyframe,
-                        let format = CMSampleBufferGetFormatDescription(sampleBuffer)
-                    {
-                        let headers = try AnnexBConverter.parameterSets(from: format)
-                        try writer.append(headers)
+                    var frameData = Data()
+
+                    if isKeyframe {
+                        guard
+                            let format =
+                                CMSampleBufferGetFormatDescription(sampleBuffer)
+                        else {
+                            throw NSError(
+                                domain: "WindowBridge.Encoder",
+                                code: 1,
+                                userInfo: [
+                                    NSLocalizedDescriptionKey:
+                                        "Keyframe is missing its format description"
+                                ]
+                            )
+                        }
+
+                        let headers = try AnnexBConverter.parameterSets(
+                            from: format
+                        )
+                        frameData.append(headers)
                     }
 
-                    try writer.append(annexB)
+                    frameData.append(annexB)
+
+                    try writer.appendFrame(
+                        frameData,
+                        isKeyframe: isKeyframe
+                    )
                 }
 
-                if annexB.starts(with: [0, 0, 0, 1]) {
-                    print("Annex B conversion successful: \(annexB.count) bytes")
-                } else {
-                    print("Invalid Annex B start code")
-                }
             } catch {
                 print("Annex B conversion failed: \(error)")
-            }
-
-            if let format = CMSampleBufferGetFormatDescription(sampleBuffer) {
-                var parameterSetCount = 0
-
-                var nalUnitHeaderLength: Int32 = 0
-
-                let result = CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
-                    format,
-                    parameterSetIndex: 0,
-                    parameterSetPointerOut: nil,
-                    parameterSetSizeOut: nil,
-                    parameterSetCountOut: &parameterSetCount,
-                    nalUnitHeaderLengthOut: &nalUnitHeaderLength
-                )
-
-                if result == noErr {
-                    print(
-                        "Parameter sets: \(parameterSetCount) | NAL length: \(nalUnitHeaderLength) bytes"
-                    )
-
-                    do {
-                        let headers = try AnnexBConverter.parameterSets(from: format)
-
-                        print("Extracted SPS/PPS: \(headers.count) bytes")
-
-                        if headers.starts(with: [0, 0, 0, 1]) {
-                            print("SPS/PPS Annex B formatting verified")
-                        }
-                    } catch {
-                        print("Failed to extract SPS/PPS: \(error)")
-                    }
-
-                } else {
-                    print("Failed to read H.264 metadata: \(result)")
-                }
             }
 
         }
