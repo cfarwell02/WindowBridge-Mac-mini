@@ -48,22 +48,6 @@ final class FrameReceiver: NSObject, SCStreamOutput {
             firstFrameTime = now
         }
 
-        if frameCount % 10 == 0, let firstFrameTime {
-            let elapsed = now - firstFrameTime
-
-            if elapsed > 0 {
-                let fps = Double(frameCount - 1) / elapsed
-                let completeFPS = Double(completeFrameCount) / elapsed
-
-                print(
-                    String(
-                        format: "Callbacks: %.2f/s | Complete frames: %.2f/s",
-                        fps,
-                        completeFPS
-                    ))
-            }
-        }
-
         guard isComplete else { return }
 
         if completeFrameCount == 1 {
