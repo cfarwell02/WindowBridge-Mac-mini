@@ -3,10 +3,14 @@ import CoreVideo
 import Foundation
 import ScreenCaptureKit
 
-final class FrameReceiver: NSObject, SCStreamOutput {
+final class FrameReceiver: NSObject, SCStreamOutput, @unchecked Sendable {
     private var frameCount = 0
     private var encoder: H264Encoder?
     private let output: H264Output?
+    let frameQueue = DispatchQueue(label: "com.windowbridge.frames")
+    private var latestFrame: CVPixelBuffer?
+    private var idleTimer: DispatchSourceTimer?
+    private let idleInterval: DispatchTimeInterval = .milliseconds(500)
 
     init(output: H264Output? = nil) {
         self.output = output
@@ -84,9 +88,10 @@ final class FrameReceiver: NSObject, SCStreamOutput {
 
                     self.encoder = encoder
 
-                    try encoder.encode(
+                    try submitCapturedFrame(
                         pixelBuffer,
-                        at: CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                        using: encoder,
+                        capturedAt: CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
                     )
 
                     print("Submitted first frame for H.264 encoding")
@@ -103,9 +108,10 @@ final class FrameReceiver: NSObject, SCStreamOutput {
         {
 
             do {
-                try encoder.encode(
+                try submitCapturedFrame(
                     pixelBuffer,
-                    at: CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                    using: encoder,
+                    capturedAt: CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
                 )
             } catch {
                 print("Failed to encode frame \(frameCount): \(error)")
@@ -115,12 +121,64 @@ final class FrameReceiver: NSObject, SCStreamOutput {
     }
 
     func finishEncoding() throws {
-        guard let encoder else {
-            print("No encoder to finalize")
+        try frameQueue.sync {
+            idleTimer?.cancel()
+            idleTimer = nil
+            latestFrame = nil
+
+            guard let encoder else {
+                print("No encoder to finalize")
+                return
+            }
+
+            try encoder.finish()
+        }
+    }
+
+    private func submitCapturedFrame(
+        _ pixelBuffer: CVPixelBuffer,
+        using encoder: H264Encoder,
+        capturedAt: CMTime
+    ) throws {
+        guard output != nil else {
+            try encoder.encode(pixelBuffer, at: capturedAt)
             return
         }
 
-        try encoder.finish()
+        try encodeLiveFrame(pixelBuffer, using: encoder)
+        latestFrame = pixelBuffer
+
+        let deadline = DispatchTime.now() + idleInterval
+        if let idleTimer {
+            idleTimer.schedule(deadline: deadline, repeating: idleInterval)
+            return
+        }
+
+        let timer = DispatchSource.makeTimerSource(queue: frameQueue)
+        timer.schedule(deadline: deadline, repeating: idleInterval)
+        timer.setEventHandler { [weak self] in
+            self?.repeatLatestFrame()
+        }
+        idleTimer = timer
+        timer.activate()
+    }
+
+    private func repeatLatestFrame() {
+        guard let latestFrame, let encoder else { return }
+
+        do {
+            try encodeLiveFrame(latestFrame, using: encoder)
+        } catch {
+            print("Failed to encode idle frame: \(error)")
+        }
+    }
+
+    private func encodeLiveFrame(
+        _ pixelBuffer: CVPixelBuffer,
+        using encoder: H264Encoder
+    ) throws {
+        let timestamp = CMClockGetTime(CMClockGetHostTimeClock())
+        try encoder.encode(pixelBuffer, at: timestamp)
     }
 
 }

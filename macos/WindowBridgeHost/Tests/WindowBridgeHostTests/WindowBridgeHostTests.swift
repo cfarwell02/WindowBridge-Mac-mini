@@ -71,3 +71,55 @@ import Testing
 
     #expect(didThrow)
 }
+
+@Test func mapsNormalizedCoordinatesToScreen() throws {
+    let windowFrame = CGRect(
+        x: 260,
+        y: 105,
+        width: 940,
+        height: 750
+    )
+
+    let position = try InputController.screenPosition(
+        normalizedX: 0.5,
+        normalizedY: 0.5,
+        windowFrame: windowFrame
+    )
+
+    #expect(position == CGPoint(x: 730, y: 480))
+}
+
+@Test func retainIncompleteData() throws {
+    var buffer = InputLineBuffer()
+
+    let firstLines = try buffer.append(Data("hel".utf8))
+    #expect(firstLines.isEmpty)
+
+    let secondLines = try buffer.append(Data("lo\n".utf8))
+    #expect(secondLines == [Data("hello".utf8)])
+}
+
+@Test func splitMultipleMessagesInOneAppend() throws {
+    var buffer = InputLineBuffer()
+
+    let lines: [Data] = try buffer.append(Data("first\nsecond\n".utf8))
+    #expect(lines == [Data("first".utf8), Data("second".utf8)])
+}
+
+@Test func rejectsOversizedMessageAcrossAppends() throws {
+    var buffer = InputLineBuffer()
+
+    let lines = try buffer.append(Data(repeating: 0x41, count: 4096))  // 4096 bytes of 'A'
+    #expect(lines.isEmpty)
+
+    var didThrow = false
+
+    do {
+        _ = try buffer.append(Data([0x41]))
+    } catch {
+        didThrow = true
+    }
+
+    #expect(didThrow)
+
+}

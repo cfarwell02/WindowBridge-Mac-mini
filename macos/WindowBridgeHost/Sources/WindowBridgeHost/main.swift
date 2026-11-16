@@ -119,7 +119,7 @@ do {
             try stream.addStreamOutput(
                 receiver,
                 type: .screen,
-                sampleHandlerQueue: DispatchQueue(label: "com.windowbridge.frames")
+                sampleHandlerQueue: receiver.frameQueue
             )
 
             let startCapture: () async throws -> Void = stream.startCapture
